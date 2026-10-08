@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>TucanoCBD · Gestione</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fredoka:wght@600;700&display=swap" rel="stylesheet" />
+<!--
+  Pannello del gestore di TucanoCBD.
+  Funziona aprendo questo file nel browser (PC) o pubblicandolo online (telefono).
+  Legge e modifica il database Supabase: la chiave qui sotto è quella PUBBLICA; chi può
+  modificare lo decidono le regole del database (supabase/schema.sql), quindi senza il login
+  di un gestore ogni modifica viene rifiutata dal server.
+-->
+<style>
+  :root {
+    --fondo: #FFF7EC; --riquadro: #FFEEDB; --scelto: #F7E1C8; --testo: #111111;
+    --secondario: #5A5A54; --menta: #9FE7C6; --arancio: #FF7A33; --limone: #FFE14D;
+    --blu: #4B5BFF; --viola: #9B5BFF; --rosso: #E0242B; --verde: #178A2C;
+    --bordo: 2.5px solid #111111; --ombra: 4px 4px 0 #111111;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fondo); color: var(--testo); font-family: 'DM Sans', system-ui, sans-serif; }
+  body { padding: 0 16px calc(32px + env(safe-area-inset-bottom)); }
+  h1, h2, h3, .titolo { font-family: 'Fredoka', system-ui, sans-serif; font-weight: 700; margin: 0; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .contenitore { max-width: 900px; margin: 0 auto; }
+  .nascosto { display: none !important; }
+
+  /* Testata */
+  header { position: sticky; top: 0; z-index: 5; background: var(--fondo); padding: 14px 0 10px; display: flex; align-items: center; gap: 12px; border-bottom: var(--bordo); margin-bottom: 18px; }
+  header h1 { font-size: 22px; flex: 1; }
+  header h1 span { color: var(--arancio); }
+  .stato { font-size: 13px; color: var(--secondario); }
+
+  /* Bottoni "pop" */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 20px; border: var(--bordo); border-radius: 999px; background: #fff; box-shadow: var(--ombra); font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 16px; cursor: pointer; transition: transform .08s, box-shadow .08s; white-space: nowrap; }
+  .btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #111; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primario { background: var(--arancio); }
+  .btn.scuro { background: #111; color: #fff; }
+  .btn.piccolo { min-height: 38px; padding: 0 14px; font-size: 14px; box-shadow: 3px 3px 0 #111; }
+  .btn.pericolo { color: var(--rosso); border-color: var(--rosso); box-shadow: 3px 3px 0 var(--rosso); }
+
+  /* Riquadri */
+  .riquadro { background: #fff; border: var(--bordo); border-radius: 20px; box-shadow: var(--ombra); padding: 18px; }
+  .menta { background: var(--menta); position: relative; overflow: hidden; }
+  .menta::before { content: ''; position: absolute; inset: -60%; background: repeating-conic-gradient(rgba(255,255,255,.35) 0 8deg, transparent 8deg 20deg); pointer-events: none; }
+  .menta > * { position: relative; }
+  .riga { display: flex; align-items: center; gap: 12px; }
+  .colonna { display: flex; flex-direction: column; gap: 12px; }
+  .spazio { flex: 1; }
+  .nota { font-size: 13px; color: var(--secondario); }
+
+  /* Login */
+  #login { max-width: 420px; margin: 8vh auto 0; }
+  #login h2 { font-size: 30px; }
+
+  /* Schede */
+  .schede { display: flex; gap: 8px; margin: 0 0 18px; overflow-x: auto; padding-bottom: 6px; }
+  .scheda { border: var(--bordo); border-radius: 999px; padding: 8px 16px; background: #fff; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .scheda.attiva { background: #111; color: #fff; }
+
+  /* Elenco prodotti */
+  .elenco { display: flex; flex-direction: column; gap: 14px; }
+  .prodotto { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer; }
+  .prodotto.spento { opacity: .55; }
+  .miniatura { width: 60px; height: 60px; border-radius: 14px; border: 2px solid #111; object-fit: cover; background: var(--riquadro); flex: none; }
+  .prodotto .nome { font-weight: 700; }
+  .etichette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; font-size: 13px; color: var(--secondario); }
+  .badge { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; border: 1.5px solid #111; color: #111; }
+  .badge.offerta { background: var(--limone); }
+  .badge.esaurito { background: var(--rosso); color: #fff; border-color: var(--rosso); }
+  .badge.nonvisibile { background: var(--scelto); }
+  .contatore { display: flex; align-items: center; gap: 4px; background: var(--riquadro); border: 2px solid #111; border-radius: 999px; padding: 2px; flex: none; }
+  .contatore button { width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; font-size: 20px; font-weight: 700; cursor: pointer; }
+  .contatore span { min-width: 26px; text-align: center; font-weight: 700; }
+
+  /* Moduli */
+  label { display: flex; flex-direction: column; gap: 4px; font-weight: 700; font-size: 14px; }
+  input[type=search], input[type=text], input[type=email], input[type=password], input[type=number], input[type=url], textarea, select {
+    width: 100%; min-height: 46px; padding: 10px 14px; border: 2px solid #111; border-radius: 14px; background: #fff; font-weight: 400; font-size: 16px;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  .due { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .interruttore { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 700; }
+  .interruttore input { width: 52px; height: 30px; accent-color: var(--verde); }
+  .colori { display: flex; flex-wrap: wrap; gap: 8px; }
+  .colore { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #111; cursor: pointer; }
+  .colore.scelto { outline: 3px solid #111; outline-offset: 2px; }
+  .gruppo h3 { font-size: 18px; margin-bottom: 4px; }
+  .errore-campo { color: var(--rosso); font-size: 13px; font-weight: 700; }
+
+  /* Galleria nel modulo */
+  .galleria { display: flex; gap: 12px; overflow-x: auto; padding: 4px 4px 8px; }
+  .media { flex: none; width: 108px; display: flex; flex-direction: column; gap: 4px; }
+  .media .anteprima { width: 108px; height: 108px; border-radius: 16px; border: 2.5px solid #111; overflow: hidden; background: var(--riquadro); position: relative; }
+  .media .anteprima.principale { border-color: var(--arancio); box-shadow: 0 0 0 3px var(--arancio); }
+  .media img, .media video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .media .tipo { position: absolute; top: 5px; left: 5px; background: rgba(17,17,17,.7); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 8px; }
+  .media .azioni { display: flex; justify-content: space-between; }
+  .media .azioni button { border: 0; background: transparent; font-size: 18px; cursor: pointer; padding: 2px 4px; }
+  .aggiungi-media { flex: none; width: 108px; height: 108px; border: 2.5px dashed var(--arancio); border-radius: 16px; background: #FFF1E6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 700; text-align: center; cursor: pointer; color: #B44A0C; }
+  .sezione-desc { border-bottom: 1px solid #ddd; padding-bottom: 12px; }
+
+  /* Finestra del modulo */
+  dialog { width: min(720px, 100%); max-height: 100dvh; padding: 0; border: var(--bordo); border-radius: 24px; background: var(--fondo); }
+  dialog::backdrop { background: rgba(17, 17, 17, .55); }
+  @media (max-width: 640px) { dialog { width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; } }
+  .dialog-testata { position: sticky; top: 0; z-index: 2; background: var(--fondo); display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: var(--bordo); }
+  .dialog-corpo { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .dialog-piede { position: sticky; bottom: 0; background: var(--fondo); display: flex; gap: 12px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: var(--bordo); }
+
+  /* Avvisi */
+  #avviso { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20; max-width: calc(100% - 32px); padding: 12px 18px; border: var(--bordo); border-radius: 16px; box-shadow: var(--ombra); background: #fff; font-weight: 700; }
+  #avviso.ok { background: var(--menta); }
+  #avviso.male { background: #FFD9D9; }
+  .vuoto { border-style: dashed; text-align: center; }
+
+  .scanner-operazioni .btn { min-height: 72px; border-radius: 18px; font-size: 20px; padding: 8px; }
+  .scanner-operazioni .segno { font-size: 34px; line-height: 1; }
+  #scanner-carica { background: var(--menta); }
+  #scanner-scarica { background: #FFD9D9; }
+  #scanner-camera { max-width: 480px; width: 100%; overflow: hidden; border-radius: 16px; }
+  #scanner-esito { overflow-wrap: anywhere; }
+  #qr-etichette { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .etichetta-qr { background: white; border: 1px dashed #555; padding: 12px; display: flex; flex-direction: column; align-items: center; text-align: center; break-inside: avoid; overflow-wrap: anywhere; }
+  .etichetta-qr canvas { max-width: 100%; height: auto !important; }
+  @media print {
+    body { padding: 0; background: white; }
+    body > :not(#qr-dialog) { display: none !important; }
+    #qr-dialog { position: static; display: block; width: 100%; max-width: none; max-height: none; height: auto; overflow: visible; border: 0; background: white; }
+    #qr-dialog::backdrop, #qr-dialog .dialog-testata { display: none; }
+    #qr-etichette { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  }
+
+  .strumenti-catalogo { gap: 14px; }
+  .filtri-catalogo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .prodotto .spazio { min-width: 120px; }
+  .azioni-prodotto { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; border-top: 1px solid #ddd; padding-top: 10px; }
+  .azioni-prodotto .contatore { margin-left: auto; }
+  .prodotto:focus-visible, .btn:focus-visible { outline: 3px solid var(--blu); outline-offset: 4px; }
+  #rapida { max-width: 480px; }
+  .scorte-rapide { font-size: 28px; font-weight: 700; }
+  #risultati-catalogo { margin: 0; }
+  @media (max-width: 640px) {
+    .filtri-catalogo { grid-template-columns: 1fr; }
+    header, [data-pagina="prodotti"] > .riga { flex-wrap: wrap; }
+    #chi { overflow-wrap: anywhere; max-width: 100%; }
+  }
+
+  header { display: block; }
+  .testata-principale { display: flex; align-items: center; gap: 8px; }
+  header h1 { flex: none; font-size: 19px; line-height: 1.1; }
+  header h1 small { display: block; font-size: 13px; margin-top: 3px; }
+  .schede { flex: 1; justify-content: flex-end; gap: 4px; margin: 0; padding: 0; overflow: visible; }
+  .scheda { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; padding: 0; border-radius: 12px; }
+  .scheda svg { width: 23px; height: 23px; }
+  .scheda.attiva { background: var(--arancio); color: #111; box-shadow: 2px 2px 0 #111; }
+  .scheda:focus-visible { outline: 3px solid var(--blu); outline-offset: 3px; }
+  .testata-account { display: flex; align-items: center; gap: 10px; padding-top: 10px; font-size: 13px; }
+  .testata-account .stato { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  @media (max-width: 390px) {
+    header h1 { font-size: 17px; }
+    .scheda { width: 40px; height: 44px; }
+  }
+  @media (max-width: 340px) {
+    body { padding-left: 10px; padding-right: 10px; }
+    header h1 { font-size: 15px; }
+    .schede { gap: 2px; }
+    .scheda { width: 36px; }
+  }
+  summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+  details[open] > summary { margin-bottom: 12px; }
+  #scanner-catalogo > .riquadro { border: 0; box-shadow: none; padding: 0; }
+  /* Il catalogo usa schede; i comandi sono separati dalle informazioni. */
+  [data-pagina="prodotti"] > .riga { flex-wrap: wrap; }
+  [data-pagina="prodotti"] .comando-principale { border-radius: 12px; }
+  [data-pagina="prodotti"] .comando-secondario { border-radius: 10px; box-shadow: none; background: transparent; }
+  .strumenti-catalogo { padding: 16px; border-radius: 14px; background: #EFEDE8; border: 1px solid #D7D2C9; }
+  .strumenti-catalogo summary { color: #555; }
+  .prodotto { border: 1px solid #D7D2C9; border-left: 5px solid var(--menta); border-radius: 16px; box-shadow: 0 2px 5px #1111110D; padding: 16px; gap: 14px; cursor: default; }
+  .prodotto.spento { border-left-color: #B8B8B8; }
+  .prodotto .miniatura { width: 72px; height: 72px; border: 1px solid #DDD; border-radius: 12px; }
+  .prodotto .nome { font-size: 21px; line-height: 1.2; }
+  .prezzo-catalogo { font-size: 18px; font-weight: 700; margin: 5px 0; }
+  .prodotto .badge { border: 0; border-radius: 5px; padding: 3px 7px; }
+  .azioni-prodotto { margin-top: 2px; border-top-color: #ECE9E3; gap: 8px; }
+  .comando-prodotto { min-height: 40px; padding: 7px 10px; border: 0; border-radius: 8px; background: #F1F2F3; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .comando-prodotto.modifica { background: #E7EFFD; color: #25466E; }
+  .prodotto .contatore { border: 1px solid #C9D9D0; border-radius: 10px; background: #EDF7F1; width: 100%; justify-content: space-between; padding: 4px; margin: 0; }
+  .prodotto .contatore button { background: #FFF; border-radius: 7px; width: 40px; height: 36px; }
+  .prodotto .contatore span { font-size: 14px; }
+  #scanner-catalogo { border: 1px solid #CAD5E3; border-radius: 12px; box-shadow: none; background: #EFF4FB; }
+  #scanner-catalogo > .riquadro { background: transparent; }
+  .comando-prodotto:focus-visible { outline: 3px solid var(--blu); outline-offset: 3px; }
+  #pannello { min-height: calc(100dvh - 140px); touch-action: pan-y; }
+  .galleria, #scanner-camera, [data-no-swipe], input, textarea, select { touch-action: auto; }
+</style>
+</head>
+<body>
+<div class="contenitore">
+  <header>
+    <div class="testata-principale"><h1>Tucano<span>CBD</span><small>Gestione</small></h1>
+      <nav id="navigazione" class="schede nascosto" role="tablist" aria-label="Sezioni Gestione"><button id="tab-prodotti" class="scheda" type="button" role="tab" data-scheda="prodotti" aria-label="Catalogo e scorte" title="Catalogo e scorte" aria-controls="pagina-prodotti" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="M3 8v9l9 5 9-5V8M12 13v9M7.5 5.5l9 5"/></svg></button><button id="tab-premi" class="scheda" type="button" role="tab" data-scheda="premi" aria-label="Premi" title="Premi" aria-controls="pagina-premi" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13"/><path d="M12 8H8a3 3 0 1 1 3-3l1 3Zm0 0h4a3 3 0 1 0-3-3l-1 3Z"/></svg></button><button id="tab-distributore" class="scheda" type="button" role="tab" data-scheda="distributore" aria-label="Distributore" title="Distributore" aria-controls="pagina-distributore" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 5h8v9H8zm0 13h5m3-1v2M11 5v9M8 9h8"/></svg></button><button id="tab-distribuzione" class="scheda" type="button" role="tab" data-scheda="distribuzione" aria-label="Distribuisci app" title="Distribuisci app" aria-controls="pagina-distribuzione" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5"/></svg></button></nav>
+    </div>
+    <div id="testata-account" class="testata-account nascosto"><strong id="sezione-attiva">Prodotti</strong><span class="stato" id="chi"></span><button class="btn piccolo nascosto" id="esci">Esci</button></div>
+  </header>
+
+  <!-- ===== Login ===== -->
+  <section id="login" class="riquadro menta colonna nascosto">
+    <h2>Area gestore</h2>
+    <p class="nota" style="color:#111">Entra con l'email e la password del tuo utente Supabase.</p>
+    <form id="form-login" class="colonna">
+      <label>Email <input type="email" id="email" autocomplete="email" required /></label>
+      <label>Password <input type="password" id="password" autocomplete="current-password" required /></label>
+      <span class="errore-campo" id="errore-login"></span>
+      <button class="btn primario" type="submit" id="entra">Entra</button>
+    </form>
+  </section>
+
+  <!-- ===== Pannello ===== -->
+  <main id="pannello" class="nascosto">
+
+
+    <section id="aggiornamento-gestione" class="riquadro menta colonna nascosto" style="margin-bottom:18px" aria-label="Aggiornamento Gestione">
+      <h3>Nuova versione di Gestione</h3><p id="gestione-versione-nuova" style="margin:0"></p>
+      <a id="gestione-scarica" class="btn primario" target="_blank" rel="noopener">Aggiorna Gestione</a>
+      <p class="nota" style="margin:0">Scarica l’APK e conferma l’aggiornamento sul telefono.</p>
+    </section>
+
+
+    <!-- Prodotti -->
+    <section id="pagina-prodotti" role="tabpanel" aria-labelledby="tab-prodotti" data-pagina="prodotti" class="colonna">
+      <div id="server-vuoto" class="riquadro vuoto colonna nascosto">
+        <h3>Il catalogo è vuoto</h3>
+        <p class="nota">Carica i 5 prodotti di esempio (con foto, video, premi e scorte) e poi modificali come vuoi.</p>
+        <button class="btn primario" id="carica-esempio">Carica il catalogo di esempio</button>
+      </div>
+      <div class="riga">
+        <h2 class="spazio" style="font-size:24px">Catalogo prodotti</h2>
+        <button class="btn piccolo comando-secondario" id="qr-tutti">QR prodotti</button>
+        <button class="btn primario piccolo comando-principale" id="nuovo">+ Nuovo prodotto</button>
+      </div>
+      <div class="strumenti-catalogo colonna">
+        <label>Cerca nel catalogo <input id="ricerca-prodotti" type="search" placeholder="Nome, formato, categoria o casella (es. A1)" autocomplete="off" /></label>
+        <details id="filtri-avanzati"><summary>Filtri del catalogo</summary><div class="filtri-catalogo">
+          <label>Categoria <select id="filtro-categoria"><option value="">Tutte le categorie</option></select></label>
+          <label>Mostra <select id="filtro-stato"><option value="">Tutti i prodotti</option><option value="visibili">Visibili ai clienti</option><option value="nascosti">Nascosti</option><option value="offerta">In offerta</option></select></label>
+          <label>Scorte <select id="filtro-scorte"><option value="">Tutte le scorte</option><option value="disponibili">Disponibili</option><option value="esauriti">Esauriti</option><option value="basse">Scorte basse (1–3 pezzi)</option></select></label>
+        </div>
+        <div class="riga"><p id="risultati-catalogo" class="nota spazio" role="status" aria-live="polite"></p><button class="btn piccolo" id="azzera-filtri" type="button">Azzera filtri</button></div></details>
+      </div>
+      <div class="riquadro vuoto colonna nascosto" id="nessun-risultato"><h3>Nessun prodotto trovato</h3><p class="nota">Prova un altro nome o azzera i filtri.</p></div>
+      <details id="scanner-catalogo" class="riquadro"><summary>Scansiona QR / carica e scarica scorte</summary>
+      <div class="riquadro colonna">
+        <h3>Seleziona il prodotto e aggiorna le scorte</h3>
+        <p class="nota">Scansiona un QR oppure scegli manualmente il prodotto. Dopo aver visto la scheda, premi + Carica o − Scarica per registrare il movimento.</p>
+        <div class="riga"><button class="btn primario" id="scanner-avvia" type="button">Scansiona QR</button><button class="btn" id="scanner-ferma" type="button" disabled>Ferma</button></div>
+        <div id="scanner-camera"></div>
+        <p class="nota">La fotocamera si ferma quando riconosce un prodotto. La scansione seleziona la scheda senza cambiare le scorte.</p>
+        <div class="colonna">
+          <label>Cerca per selezione manuale <input id="scanner-ricerca" type="search" placeholder="Nome, codice o casella" autocomplete="off" /></label>
+          <label>Prodotto <select id="scanner-prodotto"><option value="">Scegli un prodotto…</option></select></label>
+        </div>
+        <form id="scanner-form" class="colonna">
+          <label>Lettore USB o contenuto QR <input id="scanner-codice" type="text" autocomplete="off" placeholder="Scansiona con il lettore oppure incolla il codice QR" required /></label>
+          <button class="btn" id="scanner-applica" type="submit">Mostra prodotto</button>
+        </form>
+        <div id="scanner-selezionato" class="riquadro colonna nascosto">
+          <div class="riga"><img id="scanner-foto" class="miniatura" alt="" /><div class="spazio"><h3 id="scanner-nome"></h3><p class="nota" id="scanner-dettagli" style="margin:4px 0;overflow-wrap:anywhere"></p></div></div>
+          <p id="scanner-scorte" class="scorte-rapide" style="margin:0" role="status" aria-live="polite"></p>
+          <label>Pezzi da caricare o scaricare <input id="scanner-quantita" type="number" min="1" max="10000" step="1" value="1" required /></label>
+          <div class="due scanner-operazioni" role="group" aria-label="Registra un movimento di scorte">
+            <button class="btn" id="scanner-carica" type="button" disabled><span class="segno" aria-hidden="true">+</span> Carica</button>
+            <button class="btn" id="scanner-scarica" type="button" disabled><span class="segno" aria-hidden="true">−</span> Scarica</button>
+          </div>
+          <p class="nota" style="margin:0">Ogni pressione registra subito la quantità indicata sul prodotto selezionato.</p>
+        </div>
+        <p id="scanner-esito" role="status" aria-live="polite">Nessuna scansione registrata.</p>
+      </div>
+    </details>
+      <div class="elenco" id="elenco"></div>
+      <p class="nota">Usa Modifica rapida per prezzo, visibilità e scorte. Apri scheda per foto, video, offerte e descrizioni. Con − e + registri subito un pezzo in meno o in più.</p>
+    </section>
+
+
+
+    <!-- Premi -->
+    <section id="pagina-premi" role="tabpanel" aria-labelledby="tab-premi" data-pagina="premi" class="colonna nascosto">
+      <div class="riquadro colonna">
+        <h3>Premi a punti</h3>
+        <div class="colonna" id="elenco-premi"></div>
+      </div>
+      <div class="riquadro colonna">
+        <h3>Aggiungi un premio</h3>
+        <label>Prodotto <select id="premio-prodotto"></select></label>
+        <label>Punti necessari <input type="number" id="premio-punti" min="1" step="1" placeholder="es. 150" /></label>
+        <button class="btn primario" id="aggiungi-premio">Aggiungi premio</button>
+      </div>
+    </section>
+
+    <!-- Distributore -->
+    <section id="pagina-distributore" role="tabpanel" aria-labelledby="tab-distributore" data-pagina="distributore" class="colonna nascosto">
+    <section class="riquadro menta" style="margin-bottom:18px">
+      <div class="riga">
+        <div class="spazio">
+          <h2 style="font-size:26px">Il tuo distributore</h2>
+          <div class="nota" style="color:#111" id="riepilogo"></div>
+        </div>
+        <button class="btn piccolo" id="aggiorna" title="Ricarica dal server">↻ Aggiorna</button>
+      </div>
+    </section>
+      <form class="riquadro colonna" id="form-distributore">
+        <h3>Distributore</h3>
+        <label>Nome <input type="text" id="d-nome" required /></label>
+        <label>Indirizzo <input type="text" id="d-indirizzo" placeholder="Via, numero, città" /></label>
+        <label>Orari <input type="text" id="d-orari" /></label>
+        <div class="due">
+          <label>Latitudine <input type="number" step="any" id="d-lat" /></label>
+          <label>Longitudine <input type="number" step="any" id="d-lng" /></label>
+        </div>
+        <p class="nota">Le coordinate servono al tasto “Indicazioni” dell'app. Le trovi su Google Maps tenendo premuto sul punto.</p>
+        <button class="btn primario" type="submit">Salva</button>
+      </form>
+      <details class="riquadro"><summary>Storico movimenti scorte</summary><div id="storico-scorte" class="colonna"><p class="nota">Apri la tab per caricare i movimenti.</p></div></details>
+    </section>
+    <section id="pagina-distribuzione" role="tabpanel" aria-labelledby="tab-distribuzione" data-pagina="distribuzione" class="colonna nascosto">
+      <div class="riquadro colonna"><h3>Distribuisci Clienti e Gestione</h3>
+        <p id="apk-installata" class="nota" style="margin:0"></p>
+        <button class="btn piccolo" type="button" id="apk-controlla">Controlla versioni</button>
+      </div>
+      <div class="colonna" id="apk-versioni"></div>
+      <form id="form-apk" class="riquadro colonna">
+        <h3>Pubblica una nuova versione</h3>
+        <label>App <select id="apk-app"><option value="clienti">TucanoCBD Clienti</option><option value="gestione">TucanoCBD Gestione</option></select></label>
+        <label>APK compilato <input id="apk-file" type="file" accept=".apk,application/vnd.android.package-archive" required /></label>
+        <p id="apk-file-info" class="nota" style="margin:0">Seleziona un APK della nuova versione (massimo 50 MB).</p>
+        <label>Novità <textarea id="apk-novita" maxlength="4000" placeholder="Cosa cambia in questa versione?"></textarea></label>
+        <p class="nota" style="margin:0">Versione e firma vengono lette dal file. Clienti e Gestione hanno APK separati.</p>
+        <button class="btn primario" type="submit" id="apk-pubblica" disabled>Pubblica come ultima versione</button>
+      </form>
+      <p id="apk-esito" class="nota" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</div>
+
+<!-- ===== Modulo prodotto ===== -->
+<dialog id="finestra">
+  <form id="form-prodotto" method="dialog">
+    <div class="dialog-testata">
+      <h2 class="spazio" style="font-size:22px" id="titolo-finestra">Prodotto</h2>
+      <button class="btn piccolo" type="button" id="chiudi">✕</button>
+    </div>
+    <div class="dialog-corpo">
+      <div class="riquadro colonna gruppo">
+        <h3>Foto e video</h3>
+        <div class="galleria" id="galleria"></div>
+        <input type="file" id="file" accept="image/*,video/*" multiple class="nascosto" />
+        <p class="nota">La foto col bordo arancio è l'immagine principale (schede e miniature): sceglila con ★. Con ◀ ▶ cambi l'ordine.</p>
+      </div>
+
+      <div class="riquadro colonna gruppo">
+        <h3>Prodotto</h3>
+        <label>Nome <input type="text" id="p-nome" placeholder="es. Fragola" /></label>
+        <div class="due">
+          <label>Formato <input type="text" id="p-formato" placeholder="es. 5 g" /></label>
+          <label>Grammi <input type="number" step="0.1" min="0" id="p-grammi" placeholder="es. 5" /></label>
+        </div>
+        <label>Descrizione breve <input type="text" id="p-descrizione" placeholder="Compare sotto il nome" /></label>
+        <div class="due">
+          <label>Categoria <input type="text" id="p-categoria" /></label>
+          <label>Casella <input type="text" id="p-slot" placeholder="es. B2" /></label>
+        </div>
+        <div><b>Colore</b><div class="colori" id="colori" style="margin-top:6px"></div></div>
+        <label class="interruttore">Visibile ai clienti <input type="checkbox" id="p-visibile" /></label>
+      </div>
+
+      <div class="riquadro colonna gruppo">
+        <h3>Prezzo e offerta</h3>
+        <label>Prezzo (€) <input type="text" inputmode="decimal" id="p-prezzo" placeholder="es. 14,80" /></label>
+        <label class="interruttore">In offerta <input type="checkbox" id="p-offerta" /></label>
+        <div id="campi-offerta" class="colonna">
+          <label>Prezzo in offerta (€) <input type="text" inputmode="decimal" id="p-prezzo-offerta" placeholder="es. 12,00" /></label>
+          <label>Scritta dell'offerta <input type="text" id="p-etichetta" placeholder="Se vuota: -X%" /></label>
+          <div class="nota" id="anteprima-offerta"></div>
+        </div>
+      </div>
+
+      <div class="riquadro colonna gruppo">
+        <h3>Pezzi nel distributore</h3>
+        <div class="riga"><span class="nota spazio">Aggiornali quando rifornisci la macchinetta.</span>
+          <div class="contatore"><button type="button" id="pezzi-meno">−</button><span id="pezzi">0</span><button type="button" id="pezzi-piu">+</button></div>
+        </div>
+      </div>
+
+      <div class="riquadro colonna gruppo">
+        <h3>Scheda tecnica</h3>
+        <div class="due">
+          <label>CBD % <input type="number" step="0.1" min="0" max="100" id="p-cbd" /></label>
+          <label>THC <input type="text" id="p-thc" /></label>
+        </div>
+        <label>Lotto <input type="text" id="p-lotto" /></label>
+        <label>Aromi <input type="text" id="p-aromi" placeholder="Separati da virgola, es. Fruttato, Dolce" /></label>
+        <label>Link al certificato di analisi (PDF) <input type="url" id="p-certificato" placeholder="https://..." /></label>
+      </div>
+
+      <div class="riquadro colonna gruppo">
+        <h3>Descrizione dettagliata</h3>
+        <div class="colonna" id="sezioni"></div>
+        <button class="btn piccolo" type="button" id="aggiungi-sezione">+ Aggiungi sezione</button>
+      </div>
+
+      <span class="errore-campo" id="errore-prodotto"></span>
+      <button class="btn pericolo piccolo" type="button" id="elimina">Elimina prodotto</button>
+    </div>
+    <div class="dialog-piede">
+      <button class="btn" type="button" id="annulla">Annulla</button>
+      <button class="btn primario spazio" type="button" id="salva">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="rapida" aria-labelledby="rapida-titolo">
+  <div class="dialog-testata"><h2 class="spazio" id="rapida-titolo">Modifica rapida</h2><button type="button" class="btn piccolo" id="rapida-chiudi" aria-label="Chiudi modifica rapida">✕</button></div>
+  <div class="dialog-corpo">
+    <p id="rapida-nome" style="font-weight:700;margin:0"></p>
+    <form id="form-rapida" class="riquadro colonna">
+      <h3>Prezzo e visibilità</h3>
+      <label>Prezzo normale (€) <input id="rapida-prezzo" type="text" inputmode="decimal" required /></label>
+      <p class="nota" id="rapida-offerta" style="margin:0"></p>
+      <label class="interruttore">Visibile ai clienti <input id="rapida-visibile" type="checkbox" /></label>
+      <button type="submit" class="btn primario" id="rapida-salva">Salva prezzo e visibilità</button>
+    </form>
+    <div class="riquadro colonna">
+      <h3>Scorte</h3><div id="rapida-pezzi" class="scorte-rapide" role="status" aria-live="polite"></div>
+      <label>Pezzi da caricare o scaricare <input id="rapida-quantita" type="number" min="1" max="10000" step="1" value="1" /></label>
+      <div class="due scanner-operazioni"><button class="btn" id="rapida-meno" type="button">− Scarica</button><button class="btn" id="rapida-piu" type="button">+ Carica</button></div>
+      <p class="nota" style="margin:0">Ogni pulsante registra subito il movimento delle scorte.</p>
+    </div>
+    <p id="rapida-esito" role="status" aria-live="polite" class="nota" style="margin:0"></p>
+  </div>
+</dialog>
+<dialog id="update-dialog" aria-labelledby="update-titolo">
+  <div class="dialog-testata"><h2 id="update-titolo" class="spazio">Aggiornamenti app</h2></div>
+  <div class="dialog-corpo"><p id="update-testo" style="margin:0"></p><div id="update-apps" class="colonna"></div><p class="nota">Aggiorna una app alla volta. Il download avviene dentro Gestione e Android chiede di confermare ogni installazione. Al ritorno viene controllato se resta un aggiornamento da installare.</p></div>
+  <div class="dialog-piede"><button id="update-dopo" class="btn" type="button">Più tardi</button></div>
+</dialog>
+<dialog id="apk-qr-dialog" aria-labelledby="apk-qr-titolo">
+  <div class="dialog-testata"><h2 class="spazio" id="apk-qr-titolo">QR ultima versione</h2><button type="button" class="btn piccolo" id="apk-qr-chiudi">Chiudi</button></div>
+  <div class="dialog-corpo" style="align-items:center"><canvas id="apk-qr-canvas" style="max-width:100%;height:auto" role="img" aria-label="QR download ultima versione"></canvas><p class="nota">Questo QR offre sempre l’ultima versione pubblicata.</p></div>
+</dialog>
+<dialog id="qr-dialog">
+  <div class="dialog-testata"><h2 class="spazio">Etichette prodotti</h2><button type="button" class="btn piccolo" id="qr-stampa">Stampa / PDF</button><button type="button" class="btn piccolo" id="qr-chiudi">Chiudi</button></div>
+  <div class="dialog-corpo" id="qr-etichette"></div>
+</dialog>
+<div id="avviso" class="nascosto"></div>
+
+<script type="module">
+import { inizializzaNavigazione } from './navigazione-gestione.js';
+import { inizializzaDistribuzione } from './distribuzione-apk.js';
+import { filtraProdotti, inizializzaCatalogo } from './catalogo-gestione.js';
+import { inizializzaQR } from './qr-scorte.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// Dati PUBBLICI del progetto (gli stessi dell'app). La chiave segreta non va mai messa qui.
+const URL_SERVER = 'https://nikknfigrudycmyfyptr.supabase.co';
+const CHIAVE = 'sb_publishable_82MfrGYFZ2T2egOTRxF65g_FYHuxHic';
+const db = createClient(URL_SERVER, CHIAVE);
+
+const COLORI = ['#C98A4B', '#6FA83A', '#9DBF6A', '#E0606E', '#8A62B8', '#3E8FB0', '#D9A62E', '#2F6B3A'];
+const $ = (id) => document.getElementById(id);
+
+// ---------- Stato ----------
+let catalogo = { prodotti: [], premi: [], giacenze: {}, distributore: null };
+let bozza = null; // prodotto in modifica
+
+// ---------- Utilità ----------
+function avviso(testo, tipo = 'ok') {
+  const a = $('avviso');
+  a.textContent = testo;
+  a.className = tipo;
+  clearTimeout(avviso.t);
+  avviso.t = setTimeout(() => a.classList.add('nascosto'), 3500);
+}
+function spiega(errore) {
+  const t = errore?.message ?? String(errore ?? '');
+  if (/fetch|network/i.test(t)) return 'Nessuna connessione al server.';
+  if (/row-level|permission|JWT|not authorized/i.test(t)) return 'Non hai i permessi: rientra con un account gestore.';
+  if (/duplicate key/i.test(t)) return 'Esiste già un elemento con questo codice.';
+  return 'Il server ha rifiutato la richiesta: ' + t;
+}
+const euro = (c) => (c / 100).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+const scriviEuro = (c) => (c / 100).toFixed(2).replace('.', ',');
+function leggiEuro(t) {
+  const p = String(t ?? '').trim().replace('€', '').replace(/\s/g, '').replace(',', '.');
+  return /^\d+(\.\d{1,2})?$/.test(p) ? Math.round(Number(p) * 100) : null;
+}
+const prezzoAttuale = (p) => p.offerta?.prezzo ?? p.prezzo;
+const nomeCompleto = (p) => `${p.nome} ${p.formato}`;
+function el(tag, attributi = {}, ...figli) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attributi)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const f of figli.flat()) if (f != null) e.append(f.nodeType ? f : document.createTextNode(String(f)));
+  return e;
+}
+function nuovoId(nome) {
+  const base = nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'prodotto';
+  let id = base;
+  for (let n = 2; catalogo.prodotti.some((p) => p.id === id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+// I file inclusi nell'app ({asset}) qui si vedono dalla cartella media/ accanto al pannello.
+function urlMedia(rif) {
+  if (!rif) return 'media/segnaposto.png';
+  if (rif.uri) return rif.uri;
+  const a = rif.asset;
+  if (a === 'segnaposto') return 'media/segnaposto.png';
+  if (a.endsWith('-copertina')) return `media/${a.replace(/-copertina$/, '-video')}.jpg`;
+  if (a.endsWith('-video')) return `media/${a}.mp4`;
+  return `media/${a}.jpg`;
+}
+
+// ---------- Righe del database ----------
+function rigaDaProdotto(p, posizione) {
+  return {
+    id: p.id, nome: p.nome, formato: p.formato, grammi: p.grammi, colore: p.colore,
+    immagine: p.immagine, galleria: p.galleria, descrizione: p.descrizione, sezioni: p.sezioni,
+    categoria: p.categoria, prezzo: p.prezzo, slot: p.slot, scheda: p.scheda,
+    offerta: p.offerta ?? null, nascosto: !!p.nascosto, posizione,
+  };
+}
+
+async function scarica() {
+  const [d, p, pr, g] = await Promise.all([
+    db.from('distributori').select('*').limit(1),
+    db.from('prodotti').select('*').order('posizione'),
+    db.from('premi').select('*'),
+    db.from('giacenze').select('*'),
+  ]);
+  const errore = d.error ?? p.error ?? pr.error ?? g.error;
+  if (errore) throw errore;
+  catalogo = {
+    distributore: d.data[0] ?? null,
+    prodotti: p.data.map((r) => ({ ...r, grammi: Number(r.grammi), galleria: r.galleria ?? [], sezioni: r.sezioni ?? [] })),
+    premi: pr.data,
+    giacenze: Object.fromEntries(g.data.map((r) => [r.prodotto_id, r.pezzi])),
+  };
+  disegna();
+}
+
+const qr = inizializzaQR({ db, catalogo: () => catalogo, scarica, avviso, spiega, el, urlMedia });
+
+const gestioneCatalogo = inizializzaCatalogo({ db, catalogo: () => catalogo, scarica, avviso, spiega, el, disegnaProdotti, leggiEuro, scriviEuro, euro });
+
+function disegnaProdotti() {
+  const { prodotti, giacenze } = catalogo;
+  const trovati = filtraProdotti(prodotti, giacenze, {
+    ricerca: $('ricerca-prodotti').value, categoria: $('filtro-categoria').value,
+    stato: $('filtro-stato').value, scorte: $('filtro-scorte').value,
+  });
+  $('risultati-catalogo').textContent = `${trovati.length} di ${prodotti.length} prodotti`;
+  $('nessun-risultato').classList.toggle('nascosto', trovati.length > 0 || prodotti.length === 0);
+  $('elenco').replaceChildren(...trovati.map((p) => {
+    const pezzi = giacenze[p.id] ?? 0;
+    return el('div', { class: `riquadro prodotto${p.nascosto ? ' spento' : ''}` },
+      el('img', { class: 'miniatura', src: urlMedia(p.immagine), alt: '' }),
+      el('div', { class: 'spazio' },
+        el('h3', { class: 'nome' }, nomeCompleto(p)),
+        el('div', { class: 'prezzo-catalogo' }, euro(prezzoAttuale(p))),
+        el('div', { class: 'etichette' },
+          el('span', {}, `Casella ${p.slot || '—'} · ${p.categoria || 'Senza categoria'}`),
+          p.offerta ? el('span', { class: 'badge offerta' }, 'offerta') : null,
+          p.nascosto ? el('span', { class: 'badge nonvisibile' }, 'nascosto') : null,
+          pezzi === 0 ? el('span', { class: 'badge esaurito' }, 'esaurito') : null)),
+      el('div', { class: 'azioni-prodotto' },
+        el('button', { type: 'button', class: 'comando-prodotto modifica', onclick: () => gestioneCatalogo.apri(p) }, '✎ Modifica rapida'),
+        el('button', { type: 'button', class: 'comando-prodotto', onclick: () => apriProdotto(p) }, 'Apri scheda →'),
+        el('button', { type: 'button', class: 'comando-prodotto', onclick: () => void qr.etichette([p]) }, 'Etichetta QR'),
+        el('div', { class: 'contatore', 'aria-label': `Scorte ${nomeCompleto(p)}` },
+          el('button', { type: 'button', disabled: pezzi === 0 || gestioneCatalogo.occupato(), 'aria-label': `Scarica un pezzo di ${nomeCompleto(p)}`, onclick: () => void gestioneCatalogo.movimento(p.id, -1) }, '−'),
+          el('span', {}, `${pezzi} pezzi`),
+          el('button', { type: 'button', disabled: gestioneCatalogo.occupato(), 'aria-label': `Carica un pezzo di ${nomeCompleto(p)}`, onclick: () => void gestioneCatalogo.movimento(p.id, 1) }, '+'))));
+  }));
+}
+
+const distribuzione = inizializzaDistribuzione({ db, server: URL_SERVER, el, spiega, avviso });
+
+// ---------- Disegno ----------
+function disegna() {
+  const { prodotti, premi, giacenze } = catalogo;
+  const inVendita = prodotti.filter((p) => !p.nascosto);
+  $('riepilogo').textContent =
+    `${inVendita.length} in vendita · ${inVendita.filter((p) => !(giacenze[p.id] > 0)).length} esauriti · ` +
+    `${inVendita.filter((p) => p.offerta).length} in offerta · ${premi.length} premi`;
+  $('server-vuoto').classList.toggle('nascosto', prodotti.length > 0);
+
+  qr.aggiornaCatalogo();
+  gestioneCatalogo.categorie();
+  disegnaProdotti();
+
+  // Premi
+  $('elenco-premi').replaceChildren(
+    ...(premi.length ? premi.map((pr) => {
+      const prodotto = prodotti.find((p) => p.id === pr.prodotto_id);
+      const campo = el('input', { type: 'number', min: '1', step: '1', value: pr.punti, style: 'max-width:110px' });
+      return el('div', { class: 'riga' },
+        el('span', { class: 'spazio' }, prodotto ? nomeCompleto(prodotto) : 'Prodotto eliminato'),
+        campo, el('span', { class: 'nota' }, 'punti'),
+        el('button', { class: 'btn piccolo', type: 'button', onclick: () => salvaPremio({ ...pr, punti: Math.round(Number(campo.value)) }) }, 'Salva'),
+        el('button', { class: 'btn piccolo pericolo', type: 'button', onclick: () => eliminaPremio(pr.id) }, '✕'));
+    }) : [el('p', { class: 'nota' }, 'Nessun premio.')])
+  );
+  const senzaPremio = prodotti.filter((p) => !premi.some((pr) => pr.prodotto_id === p.id));
+  $('premio-prodotto').replaceChildren(...senzaPremio.map((p) => el('option', { value: p.id }, nomeCompleto(p))));
+  $('aggiungi-premio').disabled = senzaPremio.length === 0;
+
+  // Distributore
+  const d = catalogo.distributore ?? {};
+  $('d-nome').value = d.nome ?? '';
+  $('d-indirizzo').value = d.indirizzo ?? '';
+  $('d-orari').value = d.orari ?? '';
+  $('d-lat').value = d.latitudine ?? '';
+  $('d-lng').value = d.longitudine ?? '';
+}
+
+// ---------- Azioni sul database ----------
+async function esegui(azione, messaggioOk) {
+  try {
+    await azione();
+    await scarica();
+    if (messaggioOk) avviso(messaggioOk);
+    return true;
+  } catch (e) {
+    avviso(spiega(e), 'male');
+    return false;
+  }
+}
+const verifica = ({ error }) => { if (error) throw error; };
+
+function cambiaPezzi(id, pezzi) {
+  return esegui(async () => verifica(await db.from('giacenze').upsert({ prodotto_id: id, pezzi: Math.max(0, pezzi) })));
+}
+function salvaPremio(premio) {
+  if (!(premio.punti > 0)) return avviso('I punti devono essere più di zero.', 'male');
+  return esegui(async () => verifica(await db.from('premi').upsert(premio)), 'Premio salvato');
+}
+function eliminaPremio(id) {
+  return esegui(async () => verifica(await db.from('premi').delete().eq('id', id)), 'Premio eliminato');
+}
+
+$('aggiungi-premio').onclick = () => {
+  const prodotto_id = $('premio-prodotto').value;
+  const punti = Math.round(Number($('premio-punti').value));
+  salvaPremio({ id: `premio-${prodotto_id}`, prodotto_id, punti }).then(() => ($('premio-punti').value = ''));
+};
+
+$('form-distributore').onsubmit = (e) => {
+  e.preventDefault();
+  const d = {
+    id: catalogo.distributore?.id ?? 'prato-01',
+    nome: $('d-nome').value.trim(), indirizzo: $('d-indirizzo').value.trim(), orari: $('d-orari').value.trim(),
+    latitudine: $('d-lat').value === '' ? null : Number($('d-lat').value),
+    longitudine: $('d-lng').value === '' ? null : Number($('d-lng').value),
+  };
+  esegui(async () => verifica(await db.from('distributori').upsert(d)), 'Distributore salvato');
+};
+
+// ---------- Modulo prodotto ----------
+function apriProdotto(p) {
+  const nuovo = !p;
+  bozza = p ? structuredClone(p) : {
+    id: null, nome: '', formato: '', grammi: '', colore: COLORI[1], immagine: { asset: 'segnaposto' },
+    galleria: [], descrizione: '', sezioni: [], categoria: 'Infiorescenze', prezzo: 0, slot: '',
+    scheda: { cbd: 0, thc: '< 0,2%', lotto: '', aromi: [] }, offerta: null, nascosto: false,
+  };
+  bozza.pezzi = p ? (catalogo.giacenze[p.id] ?? 0) : 0;
+  $('titolo-finestra').textContent = nuovo ? 'Nuovo prodotto' : bozza.nome;
+  $('p-nome').value = bozza.nome;
+  $('p-formato').value = bozza.formato;
+  $('p-grammi').value = bozza.grammi;
+  $('p-descrizione').value = bozza.descrizione;
+  $('p-categoria').value = bozza.categoria;
+  $('p-slot').value = bozza.slot;
+  $('p-visibile').checked = !bozza.nascosto;
+  $('p-prezzo').value = nuovo ? '' : scriviEuro(bozza.prezzo);
+  $('p-offerta').checked = !!bozza.offerta;
+  $('p-prezzo-offerta').value = bozza.offerta ? scriviEuro(bozza.offerta.prezzo) : '';
+  $('p-etichetta').value = bozza.offerta?.etichetta ?? '';
+  $('pezzi').textContent = bozza.pezzi;
+  $('p-cbd').value = bozza.scheda.cbd ?? '';
+  $('p-thc').value = bozza.scheda.thc ?? '';
+  $('p-lotto').value = bozza.scheda.lotto ?? '';
+  $('p-aromi').value = (bozza.scheda.aromi ?? []).join(', ');
+  $('p-certificato').value = bozza.scheda.certificatoUrl ?? '';
+  $('errore-prodotto').textContent = '';
+  $('elimina').classList.toggle('nascosto', nuovo);
+  $('elimina').textContent = 'Elimina prodotto';
+  $('elimina').dataset.conferma = '';
+  disegnaColori(); disegnaGalleria(); disegnaSezioni(); aggiornaOfferta();
+  $('finestra').showModal();
+}
+$('nuovo').onclick = () => apriProdotto(null);
+$('chiudi').onclick = $('annulla').onclick = () => $('finestra').close();
+
+function disegnaColori() {
+  $('colori').replaceChildren(...COLORI.map((c) =>
+    el('button', { type: 'button', class: `colore${bozza.colore === c ? ' scelto' : ''}`, style: `background:${c}`, 'aria-label': `Colore ${c}`,
+      onclick: () => { bozza.colore = c; disegnaColori(); } })));
+}
+
+const stessoRif = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function disegnaGalleria() {
+  const g = bozza.galleria;
+  const tessere = g.map((m, i) => {
+    const principale = m.tipo === 'foto' && stessoRif(m.sorgente, bozza.immagine);
+    const vista = m.tipo === 'video'
+      ? (m.copertina ? el('img', { src: urlMedia(m.copertina), alt: '' }) : el('video', { src: urlMedia(m.sorgente), muted: true, preload: 'metadata' }))
+      : el('img', { src: urlMedia(m.sorgente), alt: '' });
+    return el('div', { class: 'media' },
+      el('div', { class: `anteprima${principale ? ' principale' : ''}` }, vista, m.tipo === 'video' ? el('span', { class: 'tipo' }, '▶ video') : null),
+      el('div', { class: 'azioni' },
+        el('button', { type: 'button', title: 'Immagine principale', disabled: m.tipo !== 'foto', onclick: () => { bozza.immagine = m.sorgente; disegnaGalleria(); } }, principale ? '★' : '☆'),
+        el('button', { type: 'button', title: 'Sposta prima', onclick: () => sposta(i, -1) }, '◀'),
+        el('button', { type: 'button', title: 'Sposta dopo', onclick: () => sposta(i, 1) }, '▶'),
+        el('button', { type: 'button', title: 'Togli', onclick: () => togli(i) }, '🗑')));
+  });
+  const aggiungi = el('div', { class: 'aggiungi-media', id: 'aggiungi-media', onclick: () => $('file').click() }, el('span', { style: 'font-size:28px' }, '+'), 'Aggiungi foto o video');
+  $('galleria').replaceChildren(...tessere, aggiungi);
+}
+function sposta(i, verso) {
+  const j = i + verso, g = bozza.galleria;
+  if (j < 0 || j >= g.length) return;
+  [g[i], g[j]] = [g[j], g[i]];
+  disegnaGalleria();
+}
+function togli(i) {
+  const [tolto] = bozza.galleria.splice(i, 1);
+  if (tolto.tipo === 'foto' && stessoRif(tolto.sorgente, bozza.immagine)) {
+    bozza.immagine = bozza.galleria.find((m) => m.tipo === 'foto')?.sorgente ?? { asset: 'segnaposto' };
+  }
+  disegnaGalleria();
+}
+
+// Caricamento di foto e video nell'archivio "media" di Supabase.
+$('file').onchange = async (e) => {
+  const file = [...e.target.files];
+  e.target.value = '';
+  if (!file.length) return;
+  const tessera = $('aggiungi-media');
+  tessera.textContent = 'Caricamento…';
+  for (const [i, f] of file.entries()) {
+    if (f.size > 50 * 1024 * 1024) { avviso(`${f.name} supera i 50 MB`, 'male'); continue; }
+    const ext = (f.name.split('.').pop() || 'bin').toLowerCase();
+    const percorso = `prodotti/${Date.now()}-${i}.${ext}`;
+    const { error } = await db.storage.from('media').upload(percorso, f, { contentType: f.type || undefined });
+    if (error) { avviso(spiega(error), 'male'); continue; }
+    const uri = db.storage.from('media').getPublicUrl(percorso).data.publicUrl;
+    const video = f.type.startsWith('video');
+    bozza.galleria.push(video ? { tipo: 'video', sorgente: { uri }, didascalia: 'Video' } : { tipo: 'foto', sorgente: { uri }, didascalia: 'Foto' });
+    if (!video && bozza.immagine?.asset === 'segnaposto') bozza.immagine = { uri };
+  }
+  disegnaGalleria();
+};
+
+function disegnaSezioni() {
+  $('sezioni').replaceChildren(...bozza.sezioni.map((s, i) => {
+    const titolo = el('input', { type: 'text', value: s.titolo, placeholder: 'Titolo, es. Profilo' });
+    const testo = el('textarea', {}, s.testo);
+    titolo.oninput = () => (s.titolo = titolo.value);
+    testo.oninput = () => (s.testo = testo.value);
+    return el('div', { class: 'colonna sezione-desc' },
+      el('div', { class: 'riga' }, el('b', { class: 'spazio' }, `Sezione ${i + 1}`),
+        el('button', { class: 'btn piccolo pericolo', type: 'button', onclick: () => { bozza.sezioni.splice(i, 1); disegnaSezioni(); } }, 'Togli')),
+      titolo, testo);
+  }));
+}
+$('aggiungi-sezione').onclick = () => { bozza.sezioni.push({ titolo: '', testo: '', icona: 'document-text-outline' }); disegnaSezioni(); };
+
+function aggiornaOfferta() {
+  const attiva = $('p-offerta').checked;
+  $('campi-offerta').classList.toggle('nascosto', !attiva);
+  const p = leggiEuro($('p-prezzo').value), o = leggiEuro($('p-prezzo-offerta').value);
+  $('anteprima-offerta').textContent = attiva && p && o && o < p
+    ? `${euro(p)} → ${euro(o)}: il cliente risparmia ${euro(p - o)} (-${Math.round((1 - o / p) * 100)}%)` : '';
+}
+['p-offerta', 'p-prezzo', 'p-prezzo-offerta'].forEach((id) => $(id).addEventListener('input', aggiornaOfferta));
+$('pezzi-meno').onclick = () => { bozza.pezzi = Math.max(0, bozza.pezzi - 1); $('pezzi').textContent = bozza.pezzi; };
+$('pezzi-piu').onclick = () => { bozza.pezzi += 1; $('pezzi').textContent = bozza.pezzi; };
+
+$('salva').onclick = async () => {
+  const nome = $('p-nome').value.trim(), formato = $('p-formato').value.trim();
+  const grammi = Number(String($('p-grammi').value).replace(',', '.'));
+  const prezzo = leggiEuro($('p-prezzo').value);
+  const inOfferta = $('p-offerta').checked, prezzoOfferta = leggiEuro($('p-prezzo-offerta').value);
+  const cbd = $('p-cbd').value === '' ? 0 : Number($('p-cbd').value);
+  const errori = [];
+  if (!nome) errori.push('il nome');
+  if (!formato) errori.push('il formato (es. "2 g")');
+  if (!(grammi > 0)) errori.push('i grammi');
+  if (!prezzo) errori.push('un prezzo valido (es. 14,80)');
+  if (inOfferta && !(prezzoOfferta && prezzo && prezzoOfferta < prezzo)) errori.push('un prezzo in offerta più basso di quello normale');
+  if (!(cbd >= 0 && cbd <= 100)) errori.push('un CBD % tra 0 e 100');
+  if (errori.length) { $('errore-prodotto').textContent = 'Manca o non va bene: ' + errori.join(', ') + '.'; return; }
+
+  const esistente = !!bozza.id;
+  const id = bozza.id ?? nuovoId(`${nome} ${formato}`);
+  const prodotto = {
+    ...bozza, id, nome, formato, grammi, prezzo,
+    descrizione: $('p-descrizione').value.trim(),
+    categoria: $('p-categoria').value.trim() || 'Infiorescenze',
+    slot: $('p-slot').value.trim().toUpperCase() || '—',
+    nascosto: !$('p-visibile').checked,
+    sezioni: bozza.sezioni.filter((s) => s.titolo.trim() || s.testo.trim()),
+    immagine: bozza.immagine ?? bozza.galleria.find((m) => m.tipo === 'foto')?.sorgente ?? { asset: 'segnaposto' },
+    scheda: {
+      cbd, thc: $('p-thc').value.trim(), lotto: $('p-lotto').value.trim(),
+      aromi: $('p-aromi').value.split(',').map((a) => a.trim()).filter(Boolean),
+      ...($('p-certificato').value.trim() ? { certificatoUrl: $('p-certificato').value.trim() } : {}),
+    },
+    offerta: inOfferta ? { prezzo: prezzoOfferta, etichetta: $('p-etichetta').value.trim() || `-${Math.round((1 - prezzoOfferta / prezzo) * 100)}%` } : null,
+  };
+  const indice = catalogo.prodotti.findIndex((p) => p.id === id);
+  const posizione = indice >= 0 ? catalogo.prodotti[indice].posizione ?? indice : catalogo.prodotti.length;
+  $('salva').disabled = true;
+  const ok = await esegui(async () => {
+    verifica(await db.from('prodotti').upsert(rigaDaProdotto(prodotto, posizione)));
+    verifica(await db.from('giacenze').upsert({ prodotto_id: id, pezzi: bozza.pezzi }));
+  }, esistente ? 'Modifiche salvate' : 'Prodotto creato');
+  $('salva').disabled = false;
+  if (ok) $('finestra').close();
+};
+
+$('elimina').onclick = async () => {
+  const b = $('elimina');
+  if (!b.dataset.conferma) { b.dataset.conferma = '1'; b.textContent = 'Tocca di nuovo per eliminare definitivamente'; return; }
+  const ok = await esegui(async () => verifica(await db.from('prodotti').delete().eq('id', bozza.id)), 'Prodotto eliminato');
+  if (ok) $('finestra').close();
+};
+
+// ---------- Catalogo di esempio ----------
+const CONSERVAZIONE = { titolo: 'Conservazione', icona: 'cube-outline', testo: 'Tieni la confezione ben chiusa, al riparo da luce, calore e umidità. Una volta aperta, conserva il prodotto nella sua busta richiudibile.' };
+const AVVERTENZE = { titolo: 'Avvertenze', icona: 'alert-circle-outline', testo: 'Vendita riservata ai maggiori di 18 anni. Tenere fuori dalla portata dei bambini. Leggi sempre l’etichetta e il certificato di analisi del lotto.' };
+const galleriaEsempio = (id) => [
+  { tipo: 'foto', sorgente: { asset: id }, didascalia: 'Il prodotto' },
+  { tipo: 'video', sorgente: { asset: `${id}-video` }, copertina: { asset: `${id}-copertina` }, didascalia: 'Guardalo da vicino' },
+  { tipo: 'foto', sorgente: { asset: `${id}-confezione` }, didascalia: 'La confezione' },
+];
+const esempio = (id, nome, formato, grammi, colore, prezzo, slot, scheda, profilo, coltivazione, offerta = null) => ({
+  id, nome, formato, grammi, colore, prezzo, slot, scheda, offerta, nascosto: false,
+  categoria: 'Infiorescenze', descrizione: `Infiorescenze di canapa, confezione da ${formato}.`,
+  immagine: { asset: id }, galleria: galleriaEsempio(id),
+  sezioni: [
+    { titolo: 'Profilo', icona: 'leaf-outline', testo: profilo },
+    { titolo: 'Coltivazione', icona: 'sunny-outline', testo: coltivazione },
+    CONSERVAZIONE, AVVERTENZE,
+  ],
+});
+const ESEMPIO = {
+  distributore: { id: 'prato-01', nome: 'TucanoCBD Prato', indirizzo: 'Prato, indirizzo da definire', orari: 'Aperto 24 ore su 24', latitudine: 43.8777, longitudine: 11.1022 },
+  prodotti: [
+    esempio('torta-la-kush-2g', 'Torta LA Kush', '2 g', 2, '#C98A4B', 1480, 'A1', { cbd: 18, thc: '< 0,2%', lotto: 'TLK-2409', aromi: ['Dolce', 'Terroso'] },
+      'Infiorescenze compatte e ricche di tricomi, dal profilo aromatico dolce con un fondo terroso. Una delle varietà più richieste del nostro distributore.',
+      'Coltivata in ambiente controllato e raccolta a mano, con essiccazione lenta per preservare l’aroma.'),
+    esempio('amnesia-cbd-indoor-2g', 'Amnesia CBD Indoor', '2 g', 2, '#6FA83A', 1480, 'A2', { cbd: 15, thc: '< 0,2%', lotto: 'AMN-2409', aromi: ['Agrumato', 'Speziato'] },
+      'Varietà indoor dalle cime allungate, con note agrumate e speziate. Colori chiari e un aroma deciso già all’apertura della confezione.',
+      'Coltivazione indoor con luce, temperatura e umidità controllate per tutto il ciclo.'),
+    esempio('melone-bianco-2g', 'Melone bianco', '2 g', 2, '#9DBF6A', 1200, 'A3', { cbd: 12, thc: '< 0,2%', lotto: 'MLB-2409', aromi: ['Fruttato', 'Fresco'] },
+      'Profilo fresco e fruttato che ricorda il melone bianco maturo. Cime di dimensione media, dal colore verde chiaro.',
+      'Coltivata in serra con luce naturale, raccolta e rifinita a mano.'),
+    esempio('fragola-5g', 'Fragola', '5 g', 5, '#E0606E', 1450, 'B1', { cbd: 10, thc: '< 0,2%', lotto: 'FRG-2409', aromi: ['Fruttato', 'Dolce'] },
+      'Note dolci e fruttate di fragola, nel formato più grande del catalogo: 5 g.',
+      'Coltivata in serra e selezionata cima per cima prima del confezionamento.'),
+    esempio('kinki-kush-3-5g', 'Kinki Kush', '3,5 g', 3.5, '#8A62B8', 2000, 'B2', { cbd: 20, thc: '< 0,2%', lotto: 'KNK-2409', aromi: ['Terroso', 'Legnoso'] },
+      'Cime dense e resinose dal profilo terroso e legnoso. Il formato da 3,5 g è pensato per chi la sceglie spesso.',
+      'Coltivazione indoor e lunga stagionatura per un aroma pieno e persistente.',
+      { prezzo: 1700, etichetta: '-15% questa settimana' }),
+  ],
+  premi: [
+    { id: 'premio-melone-bianco', prodotto_id: 'melone-bianco-2g', punti: 150 },
+    { id: 'premio-fragola', prodotto_id: 'fragola-5g', punti: 180 },
+    { id: 'premio-torta-la-kush', prodotto_id: 'torta-la-kush-2g', punti: 190 },
+    { id: 'premio-kinki-kush', prodotto_id: 'kinki-kush-3-5g', punti: 260 },
+  ],
+  giacenze: { 'torta-la-kush-2g': 6, 'amnesia-cbd-indoor-2g': 4, 'melone-bianco-2g': 8, 'fragola-5g': 5, 'kinki-kush-3-5g': 3 },
+};
+$('carica-esempio').onclick = () => esegui(async () => {
+  verifica(await db.from('distributori').upsert(ESEMPIO.distributore));
+  verifica(await db.from('prodotti').upsert(ESEMPIO.prodotti.map((p, i) => rigaDaProdotto(p, i))));
+  verifica(await db.from('premi').upsert(ESEMPIO.premi));
+  verifica(await db.from('giacenze').upsert(Object.entries(ESEMPIO.giacenze).map(([prodotto_id, pezzi]) => ({ prodotto_id, pezzi }))));
+}, 'Catalogo di esempio caricato');
+
+async function caricaStorico() {
+  const target = $('storico-scorte');
+  try {
+    const { data, error } = await db.from('movimenti_scorte').select('*').order('registrato_il', { ascending: false }).order('id', { ascending: false }).limit(50);
+    if (error) throw error;
+    target.replaceChildren(...(data.length ? data.map((m) => {
+      const p = catalogo.prodotti.find((p) => p.id === m.prodotto_id);
+      return el('div', { class: 'colonna sezione-desc' },
+        el('b', {}, `${p ? nomeCompleto(p) : m.prodotto_id}: ${m.variazione > 0 ? '+' : ''}${m.variazione} pezzi`),
+        el('span', { class: 'nota' }, `${m.pezzi_prima} → ${m.pezzi_dopo} · ${new Date(m.registrato_il).toLocaleString('it-IT')}`),
+        el('span', { class: 'nota', style: 'overflow-wrap:anywhere' }, m.utente_id ? `Utente: ${m.utente_id}` : m.ruolo === 'anon' ? 'Acquisto / rimborso demo' : 'Database / server'));
+    }) : [el('p', { class: 'nota' }, 'Nessun movimento registrato. Lo storico parte dall’attivazione della nuova versione.')]));
+  } catch (e) { target.replaceChildren(el('p', { class: 'errore-campo' }, spiega(e))); }
+}
+
+// ---------- Schede ----------
+inizializzaNavigazione({ cambia: (nome) => {
+  if (nome === 'distributore') void caricaStorico();
+  if (nome === 'distribuzione') void distribuzione.carica();
+  if (nome !== 'prodotti') void qr.ferma().catch((e) => avviso(spiega(e), 'male'));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+} });
+$('scanner-catalogo').addEventListener('toggle', () => { if (!$('scanner-catalogo').open) void qr.ferma().catch(() => {}); });
+$('aggiorna').onclick = async () => { await esegui(async () => {}, 'Aggiornato'); if (!$('pagina-distributore').classList.contains('nascosto')) await caricaStorico(); };
+
+// ---------- Accesso ----------
+async function eGestore(userId) {
+  const { data } = await db.from('gestori').select('user_id').eq('user_id', userId).maybeSingle();
+  return !!data;
+}
+async function mostra(sessione) {
+  const dentro = !!sessione && (await eGestore(sessione.user.id));
+  if (sessione && !dentro) {
+    await db.auth.signOut();
+    $('errore-login').textContent = 'Questo account non è abilitato come gestore.';
+  }
+  $('login').classList.toggle('nascosto', dentro);
+  $('pannello').classList.toggle('nascosto', !dentro);
+  $('esci').classList.toggle('nascosto', !dentro);
+  $('navigazione').classList.toggle('nascosto', !dentro);
+  $('testata-account').classList.toggle('nascosto', !dentro);
+  $('chi').textContent = dentro ? sessione.user.email : '';
+  document.dispatchEvent(new Event('tucano-pronto'));
+  if (dentro) {
+    void distribuzione.carica(true);
+    try { await scarica(); } catch (e) { avviso(spiega(e), 'male'); }
+  }
+}
+$('form-login').onsubmit = async (e) => {
+  e.preventDefault();
+  $('errore-login').textContent = '';
+  $('entra').disabled = true;
+  const { data, error } = await db.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+  $('entra').disabled = false;
+  if (error) { $('errore-login').textContent = /fetch|network/i.test(error.message) ? 'Nessuna connessione al server.' : 'Email o password sbagliate.'; return; }
+  mostra(data.session);
+};
+$('esci').onclick = async () => { await qr.ferma(); $('qr-dialog').close(); $('rapida').close(); await db.auth.signOut(); mostra(null); };
+
+const { data } = await db.auth.getSession();
+mostra(data.session);
+</script>
+</body>
+</html>
